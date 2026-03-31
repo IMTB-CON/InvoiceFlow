@@ -1,0 +1,14 @@
+.env
+credentials.json
+token.json
+__pycache__/
+*.pyc
+.venv/
+
+# Runtime/diagnostic artifacts
+*.status
+run*.log
+diag_*.log
+unprocess_messages.log
+ollama_check.log
+run.pid
