@@ -5,8 +5,9 @@ import requests
 
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:27b-128k")
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "180"))
+OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "131072"))
 
 
 def _call_ollama(prompt: str) -> str:
@@ -14,6 +15,7 @@ def _call_ollama(prompt: str) -> str:
         "model": OLLAMA_MODEL,
         "prompt": prompt,
         "stream": False,
+        "options": {"num_ctx": OLLAMA_NUM_CTX},
     }
     response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT_SECONDS)
     response.raise_for_status()
