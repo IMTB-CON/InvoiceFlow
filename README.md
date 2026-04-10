@@ -1,4 +1,4 @@
-# Rechnungen POC
+# InvoiceFlow - Rechnungen POC
 
 Automatische Verarbeitung von Eingangsrechnungen per E-Mail mit lokalem LLM und Google Workspace APIs.
 
