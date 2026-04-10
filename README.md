@@ -1,106 +1,108 @@
-# Rechnungen POC
+# InvoiceFlow
 
-Automatische Verarbeitung von Eingangsrechnungen per E-Mail mit lokalem LLM und Google Workspace APIs.
+Automated processing of incoming invoices from e-mail — extracts structured data with rule-based regex, uploads PDFs to Google Drive, and writes rows to Google Sheets.
 
-## Flow
+## How it works
 
-Die Kernlogik bleibt unverändert:
+1. Fetch e-mails from Gmail that match an invoice query
+2. Extract text from PDF attachments
+3. Detect whether the PDF is an invoice (skip receipts)
+4. Extract fields (vendor, date, amount, currency, description, reference, …) with regex
+5. Detect the recipient company (IMTB Consulting GmbH vs IMTB Group GmbH)
+6. Upload the PDF to Google Drive with a structured filename
+7. Append a row to Google Sheets including a self-calculating `Datei-Benennung` formula
+8. Mark the e-mail as processed in Gmail
 
-1. Gmail lesen
-2. PDF-Text extrahieren
-3. Rechnung erkennen
-4. Rechnungsfelder extrahieren
-5. PDF nach Google Drive hochladen
-6. Daten in Google Sheets anhängen
+## Sheet columns
 
-## Projektstruktur
+| Column | Description |
+|--------|-------------|
+| Rechnungsnummer | Auto-generated sequential number (`CON_ER-YYYY-NNNN`) |
+| Rg.-Datum | Invoice date (YYYY-MM-DD) |
+| Empfänger | Recipient company (IMTB Consulting GmbH / IMTB Group GmbH) — highlighted yellow for IMTB Group |
+| Lieferant | Vendor / supplier name |
+| Rg.-Grund | Short description of what the invoice is for |
+| Summe | Gross amount + currency (e.g. `79.67 EUR`, `20.00 USD`) — highlighted yellow for non-EUR |
+| Kostenstelle | Cost centre — filled in manually, dropdown available |
+| Status | Payment method — filled in manually, dropdown available (`Überweisung`, `Lastschrift`, `Kreditkarte`, …) |
+| Datei-Benennung | Auto-calculated filename formula (`{YEAR}_{SEQ} RG_{YYMMDD}_{Vendor}_{Description}_KS{Kostenstelle}{suffix}`) |
+| E-Mail Datum | Date the e-mail was received (YYYY-MM-DD) |
+| E-Mail Absender | Sender e-mail address |
+
+## Project structure
 
 ```text
 .
-├── main.py
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── src/
 │   └── rechnungen_poc/
-│       ├── cli.py
-│       ├── config.py
-│       ├── drive.py
-│       ├── gmail.py
-│       ├── google_auth.py
-│       ├── llm.py
-│       ├── logging.py
-│       ├── models.py
-│       ├── pdf.py
-│       ├── pipeline.py
-│       ├── sheets.py
-│       └── utils.py
+│       ├── cli.py          # CLI entry point (--dry-run flag)
+│       ├── config.py       # AppConfig loaded from .env
+│       ├── drive.py        # Google Drive upload + filename generation
+│       ├── gmail.py        # Gmail fetch + mark-as-processed
+│       ├── google_auth.py  # OAuth2 flow
+│       ├── llm.py          # Regex-based extraction (no LLM required)
+│       ├── logging.py      # JSON structured logging
+│       ├── models.py       # InvoiceData, EmailMessage, PdfAttachment
+│       ├── pdf.py          # PDF text extraction (pypdfium2)
+│       ├── pipeline.py     # Orchestration
+│       ├── sheets.py       # Google Sheets writer + dropdown validation
+│       └── utils.py        # Shared helpers
 └── tests/
 ```
 
-## Voraussetzungen
+## Prerequisites
 
 - Python 3.11+
-- Lokales Ollama mit einem verfügbaren Modell
-- Google Cloud OAuth Client Credentials
-- Zugriff auf Gmail, Google Drive und Google Sheets
+- Google Cloud OAuth Client Credentials (Gmail, Drive, Sheets scopes)
+- A Google Sheets spreadsheet and Drive folder
 
 ## Setup
 
-1. Virtuelle Umgebung erstellen und aktivieren.
-2. Abhängigkeiten installieren:
+1. Create and activate a virtual environment.
+2. Install dependencies:
 
 ```bash
 pip install -r requirements-dev.txt
 ```
 
-3. `.env.example` nach `.env` kopieren und Werte setzen.
-4. `credentials.json` aus der Google Cloud Console im Projekt ablegen.
-5. Anwendung starten:
+3. Copy `.env.example` to `.env` and fill in the values.
+4. Place `credentials.json` from the Google Cloud Console in the project root.
+5. Run the pipeline:
 
 ```bash
-python main.py
+python -m rechnungen_poc
 ```
 
-Für einen sicheren Durchlauf ohne Schreibzugriffe:
+Dry run (read-only — no Drive/Sheets/Gmail writes):
 
 ```bash
-python main.py --dry-run
+python -m rechnungen_poc --dry-run
 ```
 
-## Konfiguration
+## Configuration (`.env`)
 
-Wichtige `.env`-Variablen:
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CREDENTIALS_FILE` | Path to OAuth credentials JSON |
+| `GOOGLE_TOKEN_FILE` | Path where the token is cached |
+| `GMAIL_QUERY` | Gmail search query to find invoice e-mails |
+| `GMAIL_MAX_RESULTS` | Max e-mails to fetch per run |
+| `INCLUDE_PROCESSED_EMAILS` | Also process already-labelled e-mails (`true`/`false`) |
+| `SPREADSHEET_ID` | Target Google Sheets ID |
+| `SHEET_NAME` | Sheet tab name |
+| `DRIVE_FOLDER_ID` | Target Google Drive folder ID |
+| `OWN_COMPANY_NAMES` | Comma-separated list of own company names for recipient detection |
+| `LOG_LEVEL` | Logging level (`INFO`, `DEBUG`, …) |
 
-- `GOOGLE_CREDENTIALS_FILE`
-- `GOOGLE_TOKEN_FILE`
-- `GMAIL_QUERY`
-- `GMAIL_MAX_RESULTS`
-- `INCLUDE_PROCESSED_EMAILS`
-- `GMAIL_PROCESSED_LABEL`
-- `SPREADSHEET_ID`
-- `SHEET_NAME`
-- `DRIVE_FOLDER_ID`
-- `OLLAMA_URL`
-- `OLLAMA_MODEL`
-- `OLLAMA_TIMEOUT_SECONDS`
-- `OLLAMA_NUM_CTX`
-- `LOG_LEVEL`
+## Current limitations / roadmap
+
+- **E-mail source**: currently reads Gmail via personal OAuth. Microsoft 365 / Exchange support is planned.
+- **Document storage**: currently uploads to Google Drive. Alfresco DMS integration is planned.
 
 ## Tests
 
 ```bash
 pytest
 ```
-
-Abgedeckt sind aktuell:
-
-- PDF-Extraktions-Wrapper
-- JSON-Extraktion aus LLM-Ausgaben
-- Drive-Dateinamen-Sanitizing
-- Google-Sheets-Row-Mapping
-
-## Hinweise
-
-- `--dry-run` führt alle Lese-, PDF- und LLM-Schritte aus, überspringt aber Drive-, Sheets- und Gmail-Schreiboperationen.
-- Ollama bleibt lokal angebunden, es gibt keine Cloud-LLM-Abhängigkeit.
-- Bestehende flache Skriptdateien wurden nicht zwangsweise entfernt, damit laufende lokale Arbeit nicht überschrieben wird. Der neue Einstiegspunkt verwendet ausschließlich die `src/rechnungen_poc`-Struktur.
